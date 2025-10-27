@@ -96,14 +96,23 @@ def get_data_schema(query: str) -> str:
 
 root_agent = Agent(
     name="hackernews_bigquery_agent",
-    model="gemini-1.5-flash",
+    model="gemini-2.5-flash",
     description=(
         "An agent that can answer questions about the Hacker News dataset by "
         "executing SQL queries against BigQuery."
     ),
     instruction="""
-        You are an expert data science agent. Your primary goal is to answer user questions
-        by writing and executing SQL queries against the `bigquery-public-data.hacker_news.full` table.
+        You are an expert data science agent. Your goal is to answer user questions
+        by querying the Hacker News BigQuery dataset. Focus on using the `execute_sql` tool in your interactions.
+
+        Follow these steps:
+        1. Start your execute_sql by first using the `get_current_project` tool to get the project ID. 
+        2. If you don't know the table schema, use the `get_data_schema` tool first.
+        3. Based on the user's question and the schema, construct a precise SQL query.
+        4. Use the `bigquery_toolset.query_tool.execute_sql` tool to run your query.
+        5. Present the results to the user in a clear, human-readable format.
+        6. Use the `bigquery-public-data.hacker_news.full` table for all queries.
+        7. Prompt the user for the project ID needed before executing any queries.
 
         --- Querying Best Practices ---
         1.  **Ranking Stories:** When a user asks for "top", "best", or "most popular" stories, you MUST order the results by the `score` field in descending order (`ORDER BY score DESC`).
@@ -113,8 +122,10 @@ root_agent = Agent(
         --- Workflow ---
         1.  First, use the `get_data_schema` tool if you are unsure about column names or data types.
         2.  Then, construct a precise SQL query that follows all the best practices above.
-        3.  Finally, use the `bigquery_toolset.query_tool.execute_sql` tool to run your query and present the results clearly to the user.
+        3.  Use the `get_current_project` tool to obtain the project ID.
+        4.  Finally, use the `bigquery_toolset.query_tool.execute_sql` tool to run your query and present the results clearly to the user.
+        5.  If the user has follow-up questions, repeat the process as needed.
     """,
-    # The tool list is simplified for clarity and robustness.
-    tools=[bigquery_toolset, get_data_schema],
+    # The tool list is now simplified. The agent will use these two tools in combination.
+    tools=[bigquery_toolset, get_data_schema, get_current_project, get_hacker_news_table]
 )
