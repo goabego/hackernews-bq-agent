@@ -19,6 +19,19 @@ This project contains a sophisticated AI agent built with the Google Agent Devel
 2.  **Python Environment:** A working Python environment (like the one managed by `uv` in this project).
 3.  **Permissions:** The Google Cloud user or service account running the agent must have the **"Vertex AI User"** (`roles/aiplatform.user`) and **"BigQuery User"** (`roles/bigquery.user`) roles on the target Google Cloud project.
 
+### Installation
+
+Create and activate a virtual environment:
+```bash
+uv venv
+source .venv/bin/activate
+```
+
+Then, install the required dependencies:
+```bash
+uv pip install -e .
+```
+
 ### Local Development Authentication
 
 When running this agent on your local machine (outside of Google Cloud Shell), you must authenticate your environment using Application Default Credentials (ADC). This is a critical step that allows the agent to securely access Google Cloud services on your behalf.
@@ -35,7 +48,7 @@ This command saves a credential file on your local system that the ADK and Googl
 
 ## Running the Agent
 
-Once your environment is authenticated, you can start the agent's web server using the following command:
+Once your environment is authenticated and you have activated your virtual environment, you can start the agent's web server using the following command:
 
 ```bash
 uv run adk web . --port 8501 --reload_agents
