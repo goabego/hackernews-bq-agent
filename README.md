@@ -1,100 +1,137 @@
-# BigQuery Hacker News Agent
+# Building a BigQuery Data Agent with Google ADK
 
-This project contains a sophisticated AI agent built with the Google Agent Development Kit (ADK). The agent is designed to answer natural language questions about the public Hacker News dataset by intelligently constructing and executing SQL queries against Google BigQuery.
+This repository serves as an educational example of how to build an **AI Agent** capable of interacting with a real-world database—specifically, the Hacker News public dataset on Google BigQuery.
 
-## Features
-
--   **Natural Language Queries:** Ask questions in plain English (e.g., "What are the top stories from the last week?").
--   **Dynamic SQL Generation:** The agent writes its own SQL queries based on your questions.
--   **Direct BigQuery Integration:** Uses a pre-configured BigQuery toolset to interact directly with Google Cloud.
--   **Schema Aware:** Includes a tool that allows the agent to inspect the table schema to write more accurate queries.
+Using the **Google Agent Development Kit (ADK)** and **Gemini 2.5 Flash**, this agent demonstrates the "Text-to-SQL" paradigm, where natural language questions are converted into SQL queries, executed, and the results summarized back to the user.
 
 ---
 
-## Setup and Initialization
+## 📚 Key Concepts
+
+This project demonstrates several core concepts in modern AI engineering:
+
+### 1. Agents & Tools (Function Calling)
+Large Language Models (LLMs) are powerful text generators, but they can't natively access the internet or your database. **Agents** bridge this gap by using **Tools**.
+-   In this project, we give the model Python functions (e.g., `execute_sql`, `get_data_schema`).
+-   The model doesn't run the code itself; it outputs structured text acting as a "request" to call a function. The ADK runtime executes the Python code and feeds the result back to the model.
+
+### 2. Dynamic Text-to-SQL
+Instead of hardcoding queries, we rely on the agent to generate SQL on the fly. This allows for infinite flexibility.
+-   *User:* "Show me the top stories from 2023."
+-   *Agent:* Generates `SELECT ... FROM ... WHERE timestamp BETWEEN ...`
+
+### 3. Schema Awareness
+To write good SQL, a human needs to know the table names and columns. An AI is no different.
+-   We provide a specific tool (`get_data_schema`) that the agent can call to "look up" the structure of the database before it tries to write a query. This significantly reduces hallucinations (e.g., guessing a column name that doesn't exist).
+
+---
+
+## 🏗️ Architecture
+
+The flow of information works as follows:
+
+1.  **User** asks a question: *"Who wrote the most commented story yesterday?"*
+2.  **Agent (Gemini)** analyzes the request and decides it needs to know the table structure.
+3.  **Tool Execution**: The agent calls `get_data_schema()`.
+4.  **Agent** receives the schema, then formulates a SQL query.
+5.  **Tool Execution**: The agent calls `execute_sql("SELECT by, descendants ...")`.
+6.  **BigQuery** executes the query and returns JSON-like rows.
+7.  **Agent** interprets the raw data and generates a natural language response.
+
+---
+
+## 🔎 Code Deep Dive
+
+The core logic resides in `app/agent.py`. Here are the interesting parts:
+
+### The `BigQueryToolset`
+We don't need to write the low-level API calls to Google Cloud. The ADK provides a `BigQueryToolset` that wraps the connection and execution logic.
+
+```python
+bigquery_toolset = BigQueryToolset(
+    credentials_config=credentials_config,
+    bigquery_tool_config=tool_config
+)
+```
+
+### Prompt Engineering (`instruction`)
+The "brain" of the agent is shaped by the `instruction` string passed to the `Agent` constructor. Notice how we encode domain knowledge directly into the prompt:
+
+```python
+instruction="""
+    ...
+    --- Querying Best Practices ---
+    1. Ranking Stories: ... MUST order the results by the `score` field...
+    2. Filter for Stories: ... MUST filter ... (`WHERE type = 'story'`).
+    3. Exclude Invalid Entries: ... (`WHERE dead IS NOT TRUE ...`).
+"""
+```
+This ensures that when a user asks for "top stories", the agent knows exactly how to define "top" and "story" according to our specific dataset rules.
+
+### Custom Tools
+While we use the standard BigQuery toolset, we also define custom Python functions like `get_data_schema`. The docstring is crucial because the LLM reads it to understand *when* and *how* to use the tool.
+
+```python
+def get_data_schema(query: str) -> str:
+    """
+    Returns the schema for the Hacker News BigQuery table.
+    The agent should use this tool to understand the table structure...
+    """
+```
+
+---
+
+## 🚀 Getting Started
+
+Follow these steps to run the agent on your local machine.
 
 ### Prerequisites
 
-1.  **Google Cloud SDK:** You must have the `gcloud` command-line tool installed and initialized.
-2.  **Python Environment:** A working Python environment (like the one managed by `uv` in this project).
-3.  **Permissions:** The Google Cloud user or service account running the agent must have the **"Vertex AI User"** (`roles/aiplatform.user`) and **"BigQuery User"** (`roles/bigquery.user`) roles on the target Google Cloud project.
+1.  **Google Cloud SDK:** Install and initialize the `gcloud` command-line tool.
+2.  **Python 3.12+:** Recommended to manage with `uv` or `venv`.
+3.  **Permissions:** Your Google Cloud user must have **Vertex AI User** and **BigQuery User** roles.
 
 ### Installation
 
-Create and activate a virtual environment:
-```bash
-uv venv
-source .venv/bin/activate
-```
+1.  Create and activate a virtual environment:
+    ```bash
+    uv venv
+    source .venv/bin/activate
+    ```
 
-Then, install the required dependencies:
-```bash
-uv pip install -e .
-```
+2.  Install dependencies:
+    ```bash
+    uv pip install -e .
+    ```
 
-### Local Development Authentication
+3.  **Authentication (Critical):**
+    The agent runs locally but talks to Google Cloud services. Authenticate using Application Default Credentials (ADC):
+    ```bash
+    gcloud auth application-default login
+    ```
 
-When running this agent on your local machine (outside of Google Cloud Shell), you must authenticate your environment using Application Default Credentials (ADC). This is a critical step that allows the agent to securely access Google Cloud services on your behalf.
+### Running the Agent
 
-Run the following command in your terminal and follow the browser-based authentication flow:
-
-```bash
-gcloud auth application-default login
-```
-
-This command saves a credential file on your local system that the ADK and Google Cloud client libraries will automatically detect and use for authentication.
-
----
-
-## Running the Agent
-
-Once your environment is authenticated and you have activated your virtual environment, you can start the agent's web server using the following command:
+Start the agent's web server:
 
 ```bash
 uv run adk web . --port 8501 --reload_agents
 ```
 
-This will start a local web server, and you can interact with your agent through the web UI provided by the ADK.
+Open your browser to `http://127.0.0.1:8501`.
 
-## How to Use the Tool
+### Example Interactions to Try
 
-After starting the server, open your web browser to the local address (e.g., `http://127.0.0.1:8501`) and ask the agent questions. The agent understands the context of the Hacker News dataset.
+*   **Exploration:** "What columns are in the table?" (Triggers `get_data_schema`)
+*   **Simple Query:** "What is the top story right now?"
+*   **Complex Aggregation:** "Who are the top 5 authors by total score in 2024?"
+*   **Filtering:** "Find me stories about 'Rust' that have more than 100 comments."
 
-### Example Questions:
+---
 
--   "What is the top story on Hacker News right now?"
--   "Show me the top 5 stories from the last 7 days."
--   "What were the most popular stories about 'Go-to-Market' last month?"
--   "Who are the top 10 authors by total story score?"
+## 🔮 Further Exploration
 
-### Example 
-User: Get the top 5 post in the last month.
-
-Response: 
-
-Here are the top 5 Hacker News posts from the last month:
-
-Title: AWS multiple services outage in us-east-1
-URL: https://health.aws.amazon.com/health/status?ts=20251020
-Score: 2241
-Timestamp: 2025-10-20 07:22:28+00:00
-
-Title: A WebGL game where you deliver messages on a tiny planet
-URL: https://messenger.abeto.co/
-Score: 2131
-Timestamp: 2025-09-27 15:17:30+00:00
-
-Title: Fire destroys S. Korean government's cloud storage system, no backups available
-URL: https://koreajoongangdaily.joins.com/news/2025-10-01/national/socialAffairs/NIRS-fire-destroys-governments-cloud-storage-system-no-backups-available/2412936
-Score: 2080
-Timestamp: 2025-10-05 17:20:39+00:00
-
-Title: Space Elevator
-URL: https://neal.fun/space-elevator/
-Score: 1783
-Timestamp: 2025-10-20 04:42:08+00:00
-
-Title: How I bypassed Amazon's Kindle web DRM
-URL: https://blog.pixelmelt.dev/kindle-web-drm/
-Score: 1756
-Timestamp: 2025-10-16 20:22:48+00:00
+To extend your learning, try modifying `app/agent.py`:
+1.  **Add a new tool:** Create a function that calculates the "virality" of a post (e.g., score divided by time) and expose it to the agent.
+2.  **Change the dataset:** Point the `get_hacker_news_table` function to a different public dataset (e.g., GitHub activity) and update the schema tool.
+3.  **Refine the prompt:** Try removing the "Best Practices" section from the instruction and see how the agent's performance degrades on complex queries.
